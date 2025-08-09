@@ -1,7 +1,10 @@
-import { store, readJSON } from './_common.js';
+import { readJSON } from './_common.js';
 
 export async function handler(){
-  const restaurants = await readJSON('restaurants.json', []);
+  const restaurantsRaw = await readJSON('restaurants.json', []);
+  const restaurants = restaurantsRaw.map(r =>
+    typeof r === 'string' ? ({ name: r, createdAt: new Date().toISOString() }) : r
+  );
   const orders = await readJSON('orders.json', []);
   return {
     statusCode: 200,
