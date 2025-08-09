@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pedidos en tiempo real</title>
   <style>
-    :root {
-      --bg:#0f1115; --panel:#1a1d24; --muted:#9aa3b2; --text:#e6e9ef; --line:#2a2f3a; --accent:#cbd5e1;
-    }
+    :root { --bg:#0f1115; --panel:#1a1d24; --muted:#9aa3b2; --text:#e6e9ef; --line:#2a2f3a; --accent:#cbd5e1; }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
@@ -21,6 +19,7 @@
     .btn-primary{background:#e5e7eb;color:#111827;border-color:#e5e7eb}
     .btn-primary:hover{background:#d1d5db}
     .btn-ghost{background:transparent}
+    .btn-xs{padding:6px 10px;border-radius:10px}
     .stack{display:grid;gap:10px}
     .section-title{margin:18px 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;font-size:12px;letter-spacing:.8px}
     .restaurant-list{display:grid;gap:8px}
@@ -32,11 +31,10 @@
     dialog .head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:14px 18px}
     dialog .list{max-height:60vh;overflow:auto;padding:0 18px 18px}
     table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;font-size:14px}
+    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;font-size:14px;vertical-align:middle}
     th{color:var(--muted);font-weight:600}
     .summary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px}
     .pill{background:#0b0d12;border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:12px}
-    /* layout para las gráficas en el modal */
     .charts{display:grid;gap:16px;margin-bottom:16px}
   </style>
   <link rel="icon" href="data:,">
@@ -88,6 +86,7 @@
       <button class="btn" id="closeHistory">Cerrar</button>
     </div>
     <div class="content">
+
       <!-- === GRÁFICAS (primero en el modal) === -->
       <div class="charts">
         <div>
@@ -109,20 +108,41 @@
       </div>
       <!-- === FIN GRÁFICAS === -->
 
+      <!-- Resumen -->
       <div id="summary" class="summary"></div>
 
+      <!-- Barra de filtros del historial -->
+      <div class="row" id="historyToolbar" style="gap:8px;margin:0 0 10px">
+        <select id="historySort" class="btn" style="padding:6px 10px;font-size:12px;">
+          <option value="date_desc">Reciente → Antiguo</option>
+          <option value="date_asc">Antiguo → Reciente</option>
+          <option value="name_az">A–Z</option>
+          <option value="name_za">Z–A</option>
+        </select>
+      </div>
+
+      <!-- Tabla + Paginador -->
       <div class="list">
         <table id="historyTable">
           <thead>
-            <tr><th>Fecha (MX)</th><th>Restaurante</th><th>Monto</th></tr>
+            <tr>
+              <th>Fecha (MX)</th><th>Restaurante</th><th>Monto</th><th>Acciones</th>
+            </tr>
           </thead>
           <tbody></tbody>
         </table>
+
+        <!-- Paginador -->
+        <div id="pager" style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:10px">
+          <button class="btn btn-xs" id="pgPrev">&lt;</button>
+          <div id="pgNums" class="muted" style="display:flex;gap:10px"></div>
+          <button class="btn btn-xs" id="pgNext">&gt;</button>
+        </div>
       </div>
     </div>
   </dialog>
 
-  <!-- Tu JS (ya con orden y borrado) -->
+  <!-- Tu JS -->
   <script src="/app.v2.js"></script>
 </body>
 </html>
