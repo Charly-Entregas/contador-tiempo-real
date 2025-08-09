@@ -27,4 +27,102 @@
     .restaurant-btn{width:100%;text-align:left}
     .muted{color:var(--muted)}
     .footer{margin-top:14px;font-size:12px;color:var(--muted)}
-    dialog{border:none;borde
+    dialog{border:none;border-radius:16px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line);width:min(680px,90vw)}
+    dialog .content{padding:18px}
+    dialog .head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:14px 18px}
+    dialog .list{max-height:60vh;overflow:auto;padding:0 18px 18px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;font-size:14px}
+    th{color:var(--muted);font-weight:600}
+    .summary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+    .pill{background:#0b0d12;border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:12px}
+    /* layout para las gráficas en el modal */
+    .charts{display:grid;gap:16px;margin-bottom:16px}
+  </style>
+  <link rel="icon" href="data:,">
+  <!-- Chart.js para las gráficas del historial -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Pedidos en tiempo real</h1>
+
+      <div class="row" style="margin-bottom:10px">
+        <input id="amountInput" type="number" placeholder="Monto del pedido" />
+      </div>
+
+      <div class="row" style="margin-bottom:16px">
+        <button class="btn" id="historyBtn">Historial</button>
+        <button class="btn btn-primary" id="acceptBtn">Aceptar</button>
+      </div>
+
+      <div class="stack">
+        <!-- Título + selector en la MISMA línea -->
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Restaurantes</span>
+          <select id="sortSelect" class="btn" style="padding:4px 8px;font-size:12px;">
+            <option value="az">A–Z</option>
+            <option value="za">Z–A</option>
+            <option value="new">Reciente primero</option>
+            <option value="old">Antiguo primero</option>
+          </select>
+        </div>
+
+        <!-- Lista de restaurantes -->
+        <div class="restaurant-list" id="restaurantList"></div>
+
+        <!-- Botón para agregar restaurante -->
+        <button class="btn btn-ghost" id="addRestaurantBtn">+ Agregar restaurante</button>
+
+        <!-- Estado -->
+        <div class="footer muted" id="status">Sincronizando…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de historial -->
+  <dialog id="historyDialog">
+    <div class="head">
+      <strong>Historial y resumen</strong>
+      <button class="btn" id="closeHistory">Cerrar</button>
+    </div>
+    <div class="content">
+      <!-- === GRÁFICAS (primero en el modal) === -->
+      <div class="charts">
+        <div>
+          <div class="section-title">Pedidos por hora (hoy, 08–24)</div>
+          <canvas id="chartOrdersHour" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Pedidos por día (última semana)</div>
+          <canvas id="chartOrdersWeek" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Ganancias por hora (hoy, 08–24)</div>
+          <canvas id="chartRevenueHour" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Ganancias por día (última semana)</div>
+          <canvas id="chartRevenueWeek" height="120"></canvas>
+        </div>
+      </div>
+      <!-- === FIN GRÁFICAS === -->
+
+      <div id="summary" class="summary"></div>
+
+      <div class="list">
+        <table id="historyTable">
+          <thead>
+            <tr><th>Fecha (MX)</th><th>Restaurante</th><th>Monto</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Tu JS (ya con orden y borrado) -->
+  <script src="/app.v2.js"></script>
+</body>
+</html>
