@@ -26,7 +26,7 @@
     .restaurant-btn{width:100%;text-align:left}
     .muted{color:var(--muted)}
     .footer{margin-top:14px;font-size:12px;color:var(--muted)}
-    dialog{border:none;border-radius:16px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line);width:min(680px,90vw)}
+    dialog{border:none;border-radius:16px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line);width:min(900px,94vw)}
     dialog .content{padding:18px}
     dialog .head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:14px 18px}
     dialog .list{max-height:60vh;overflow:auto;padding:0 18px 18px}
@@ -35,10 +35,12 @@
     th{color:var(--muted);font-weight:600}
     .summary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px}
     .pill{background:#0b0d12;border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:12px}
-    .charts{display:grid;gap:16px;margin-bottom:16px}
+    .charts{display:grid;gap:16px}
+    .charts.two-col{grid-template-columns:1fr; }
+    @media (min-width: 760px){ .charts.two-col{ grid-template-columns: 1fr 1fr; } }
   </style>
   <link rel="icon" href="data:,">
-  <!-- Chart.js para las gráficas del historial -->
+  <!-- Chart.js para las gráficas -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -50,12 +52,12 @@
         <input id="amountInput" type="number" placeholder="Monto del pedido" />
       </div>
 
-<div class="row" style="margin-bottom:16px">
-  <button class="btn" id="historyBtn">Historial</button>
-  <button class="btn" id="chartsBtn">Gráficas</button>
-  <button class="btn" id="excelBtn">Excel</button>
-</div>
-
+      <!-- Botones principales: Historial / Gráficas / Excel -->
+      <div class="row" style="margin-bottom:16px">
+        <button class="btn" id="historyBtn">Historial</button>
+        <button class="btn" id="chartsBtn">Gráficas</button>
+        <button class="btn" id="excelBtn">Excel</button>
+      </div>
 
       <div class="stack">
         <!-- Título + selector en la MISMA línea -->
@@ -81,35 +83,13 @@
     </div>
   </div>
 
-  <!-- Modal de historial -->
+  <!-- Modal: Historial (ya sin gráficas) -->
   <dialog id="historyDialog">
     <div class="head">
       <strong>Historial y resumen</strong>
       <button class="btn" id="closeHistory">Cerrar</button>
     </div>
     <div class="content">
-
-      <!-- === GRÁFICAS (primero en el modal) === -->
-      <div class="charts">
-        <div>
-          <div class="section-title">Pedidos por hora (hoy, 08–24)</div>
-          <canvas id="chartOrdersHour" height="120"></canvas>
-        </div>
-        <div>
-          <div class="section-title">Pedidos por día (última semana)</div>
-          <canvas id="chartOrdersWeek" height="120"></canvas>
-        </div>
-        <div>
-          <div class="section-title">Ganancias por hora (hoy, 08–24)</div>
-          <canvas id="chartRevenueHour" height="120"></canvas>
-        </div>
-        <div>
-          <div class="section-title">Ganancias por día (última semana)</div>
-          <canvas id="chartRevenueWeek" height="120"></canvas>
-        </div>
-      </div>
-      <!-- === FIN GRÁFICAS === -->
-
       <!-- Resumen -->
       <div id="summary" class="summary"></div>
 
@@ -144,7 +124,63 @@
     </div>
   </dialog>
 
-  <!-- Tu JS (combinado con gráficos + historial + paginador + edición) -->
+  <!-- Modal: GRÁFICAS -->
+  <dialog id="chartsDialog">
+    <div class="head">
+      <strong>Gráficas</strong>
+      <button class="btn" id="closeCharts">Cerrar</button>
+    </div>
+    <div class="content" style="padding-bottom:4px">
+      <!-- Filtros superiores: solo NEGOCIO + Borrar filtro -->
+      <div class="row" style="gap:10px;align-items:center;margin-bottom:12px">
+        <label class="muted" style="font-size:12px">Filtrar por negocio</label>
+        <select id="chartsFilterBusiness" class="btn" style="padding:6px 10px;font-size:12px;min-width:180px">
+          <option value="">(Todos)</option>
+          <!-- opciones se llenan con JS -->
+        </select>
+        <button class="btn btn-ghost" id="chartsClearFilter">Borrar filtro</button>
+      </div>
+
+      <!-- Cuatro gráficas (2 columnas en pantallas amplias) -->
+      <div class="charts two-col" style="margin-bottom:14px">
+        <div>
+          <div class="section-title">Pedidos por hora (hoy, 08–24)</div>
+          <canvas id="chartOrdersHour" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Pedidos por día (semana actual)</div>
+          <canvas id="chartOrdersWeek" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Ganancias por hora (hoy, 08–24)</div>
+          <canvas id="chartRevenueHour" height="120"></canvas>
+        </div>
+        <div>
+          <div class="section-title">Ganancias por día (semana actual)</div>
+          <canvas id="chartRevenueWeek" height="120"></canvas>
+        </div>
+      </div>
+
+      <!-- Quinta gráfica: histórica con selector de modo -->
+      <div class="charts" style="margin-top:8px">
+        <div>
+          <div class="row" style="gap:10px;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="section-title" style="margin:0">Histórica (del primer pedido al último)</div>
+            <select id="chartAllMode" class="btn" style="padding:6px 10px;font-size:12px;min-width:220px">
+              <option value="negocio">Por Negocio (pedidos)</option>
+              <option value="dia-semana">Por Día de la Semana (pedidos)</option>
+              <option value="hora-dia">Por Hora del Día (pedidos)</option>
+              <option value="acumulado">Ingresos Acumulados</option>
+              <option value="ganancias">Ganancias (mes a mes)</option>
+            </select>
+          </div>
+          <canvas id="chartAll" height="140"></canvas>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Tu JS combinado -->
   <script src="/app.v2.js"></script>
 </body>
 </html>
