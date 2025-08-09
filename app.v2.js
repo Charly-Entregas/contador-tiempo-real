@@ -1,4 +1,4 @@
-// app.v2.js — App completa (Ably + Netlify Functions + Gráficas + Historial con paginación y acciones)
+// app.v2.js — App completa (Ably + Netlify Functions + Gráficas en modal + Historial con paginación/acciones)
 
 (async () => {
   // ────────────────────────────────────────────────────────────────────────────
@@ -18,31 +18,36 @@
   const restaurantList   = document.getElementById('restaurantList');
   const addRestaurantBtn = document.getElementById('addRestaurantBtn');
   const historyBtn       = document.getElementById('historyBtn');
-  const acceptBtn        = document.getElementById('acceptBtn');
+  const chartsBtn        = document.getElementById('chartsBtn');
+  const excelBtn         = document.getElementById('excelBtn');
   const statusEl         = document.getElementById('status');
 
+  // Historial
   const historyDialog    = document.getElementById('historyDialog');
   const closeHistory     = document.getElementById('closeHistory');
   const historyTableBody = document.querySelector('#historyTable tbody');
   const summaryEl        = document.getElementById('summary');
-
-  // Selector de orden (restaurantes)
-  const sortSelect       = document.getElementById('sortSelect');
-
-  // Filtros de historial + paginador
   const historySortSel   = document.getElementById('historySort');
   const pgPrev           = document.getElementById('pgPrev');
   const pgNext           = document.getElementById('pgNext');
   const pgNums           = document.getElementById('pgNums');
 
+  // Restaurantes: selector de orden
+  const sortSelect       = document.getElementById('sortSelect');
+
+  // Gráficas (modal independiente)
+  const chartsDialog         = document.getElementById('chartsDialog');
+  const closeCharts          = document.getElementById('closeCharts');
+  const chartsFilterBusiness = document.getElementById('chartsFilterBusiness');
+  const chartsClearFilter    = document.getElementById('chartsClearFilter');
+  const chartAllModeSel      = document.getElementById('chartAllMode');
+
   // ────────────────────────────────────────────────────────────────────────────
   // 3) Estado
   // ────────────────────────────────────────────────────────────────────────────
   let selectedRestaurant = null;
-  // Restaurantes como objetos { name, createdAt }
-  let restaurants = [];
-  // Pedidos: { id, restaurant, amount, iso, localTime }
-  let orders = [];
+  let restaurants = []; // objetos { name, createdAt }
+  let orders = [];      // { id, restaurant, amount, iso, localTime }
 
   // Orden restaurantes
   let sortMode = localStorage.getItem('sortMode') || 'az';
@@ -52,6 +57,7 @@
       sortMode = sortSelect.value;
       localStorage.setItem('sortMode', sortMode);
       renderRestaurants();
+      fillBusinessFilter(); // para el filtro de gráficas
     });
   }
 
@@ -69,6 +75,20 @@
       renderHistoryTable();
     });
   }
+
+  // Filtro de negocio para las gráficas (único)
+  let chartsBusiness = ''; // '' = todos
+  chartsFilterBusiness?.addEventListener('change', () => {
+    chartsBusiness = chartsFilterBusiness.value || '';
+    updateCharts();
+    updateAllChart();
+  });
+  chartsClearFilter?.addEventListener('click', () => {
+    chartsBusiness = '';
+    if (chartsFilterBusiness) chartsFilterBusiness.value = '';
+    updateCharts();
+    updateAllChart();
+  });
 
   // ────────────────────────────────────────────────────────────────────────────
   // 4) Utilidades
@@ -98,8 +118,8 @@
     const a = arr.slice();
     if (sortMode === 'az')  a.sort((x,y)=> x.name.localeCompare(y.name));
     if (sortMode === 'za')  a.sort((x,y)=> y.name.localeCompare(x.name));
-    if (sortMode === 'new') a.sort((x,y)=> Date.parse(y.createdAt||0) - Date.parse(x.createdAt||0)).reverse(); // reciente primero
-    if (sortMode === 'old') a.sort((x,y)=> Date.parse(x.createdAt||0) - Date.parse(y.createdAt||0));          // antiguo primero
+    if (sortMode === 'new') a.sort((x,y)=> Date.parse(y.createdAt||0) - Date.parse(x.createdAt||0)).reverse();
+    if (sortMode === 'old') a.sort((x,y)=> Date.parse(x.createdAt||0) - Date.parse(y.createdAt||0));
     return a;
   }
 
@@ -114,7 +134,7 @@
       const btn = document.createElement('button');
       btn.className = 'btn restaurant-btn';
       btn.textContent = r.name;
-      btn.style.paddingRight = '42px'; // espacio para ✕
+      btn.style.paddingRight = '42px';
       btn.addEventListener('click', async () => {
         const amount = parseFloat(amountInput.value || '0');
         if (isNaN(amount) || amount <= 0){
@@ -131,7 +151,6 @@
         amountInput.value = '';
       });
 
-      // Icono borrar restaurante
       const del = document.createElement('button');
       del.textContent = '✕';
       del.title = 'Eliminar restaurante';
@@ -156,6 +175,15 @@
       restaurantList.appendChild(row);
     });
     statusEl.textContent = `Listo · ${restaurants.length} restaurantes`;
+  }
+
+  // Llenar opciones del filtro de negocio para gráficas
+  function fillBusinessFilter(){
+    if (!chartsFilterBusiness) return;
+    const set = new Set(restaurants.map(r => r.name));
+    const prev = chartsFilterBusiness.value;
+    chartsFilterBusiness.innerHTML = `<option value="">(Todos)</option>` + Array.from(set).map(n => `<option value="${n}">${n}</option>`).join('');
+    chartsFilterBusiness.value = prev || '';
   }
 
   // Orden de pedidos (historial)
@@ -241,6 +269,7 @@
   const HOUR_LABELS = HOURS.map(h => (h < 10 ? '0'+h : ''+h));
   const WEEKDAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
+  // Helpers de tiempo en MX
   function mxParts(iso){
     const d = new Date(iso);
     const parts = new Intl.DateTimeFormat('es-MX', {
@@ -252,43 +281,43 @@
     const m = parts.find(p=>p.type==='month').value;
     const day = parts.find(p=>p.type==='day').value;
     const hh = parts.find(p=>p.type==='hour').value;
-    return { ymd: `${y}-${m}-${day}`, hour: parseInt(hh,10) };
+    return { ymd: `${y}-${m}-${day}`, hour: parseInt(hh,10), ym: `${y}-${m}` };
   }
+  function todayYMD_MX(){ return mxParts(new Date().toISOString()).ymd; }
 
-  function mxWeekdayIndex(iso){ // 0=Mon .. 6=Sun
-    const s = new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(new Date(iso)).toLowerCase();
-    if (s.startsWith('lun')) return 0;
-    if (s.startsWith('mar')) return 1;
-    if (s.startsWith('mié') || s.startsWith('mie')) return 2;
-    if (s.startsWith('jue')) return 3;
-    if (s.startsWith('vie')) return 4;
-    if (s.startsWith('sáb') || s.startsWith('sab')) return 5;
-    return 6; // dom
-  }
-
-  function todayYMD_MX(){
-    return mxParts(new Date().toISOString()).ymd;
-  }
-
-  function weekYMDs_MX(){ // YMDs de la semana actual (Lun..Dom) en MX
+  // Semana actual (Lun..Dom)
+  function weekYMDs_MX(){
     const now = new Date();
-    const todayIdx = mxWeekdayIndex(now.toISOString()); // 0..6
-    const out = [];
-    for (let i=0; i<7; i++){
-      const d = new Date(now);
-      d.setUTCDate(now.getUTCDate() - todayIdx + i);
-      out.push(mxParts(d.toISOString()).ymd);
+    const dow = (d => ['lun','mar','mie','jue','vie','sab','dom'][d])( (new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(now).toLowerCase().startsWith('lun')) ? 0 : 0 ); // no crítica
+    const today = new Date();
+    const labelIdx = (iso) => {
+      const nm = new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(new Date(iso)).toLowerCase();
+      if (nm.startsWith('lun')) return 0;
+      if (nm.startsWith('mar')) return 1;
+      if (nm.startsWith('mié')||nm.startsWith('mie')) return 2;
+      if (nm.startsWith('jue')) return 3;
+      if (nm.startsWith('vie')) return 4;
+      if (nm.startsWith('sáb')||nm.startsWith('sab')) return 5;
+      return 6;
+    };
+    const base = [];
+    const idxToday = labelIdx(today.toISOString());
+    for (let i=0;i<7;i++){
+      const d = new Date(today);
+      d.setUTCDate(today.getUTCDate() - idxToday + i);
+      base.push(mxParts(d.toISOString()).ymd);
     }
-    return out;
+    return base;
   }
 
-  let chartOrdersHour, chartOrdersWeek, chartRevenueHour, chartRevenueWeek;
+  // Instancias Chart
+  let chartOrdersHour, chartOrdersWeek, chartRevenueHour, chartRevenueWeek, chartAll;
 
-  function buildOrUpdateChart(holder, ctx, labels, data, title){
-    if (!window.Chart) return; // por si Chart.js no cargó
+  function buildOrUpdate(holder, type, labels, data, title){
+    if (!window.Chart) return;
     const cfg = {
-      type: 'bar',
-      data: { labels, datasets: [{ label: title, data }] },
+      type,
+      data: { labels, datasets: [{ label: title, data, borderWidth: 2, fill: type==='line' ? true : false, tension: 0.3 }] },
       options: {
         responsive: true,
         animation: false,
@@ -297,12 +326,19 @@
       }
     };
     if (!holder.ref){
-      holder.ref = new Chart(ctx, cfg);
+      holder.ref = new Chart(holder.ctx, cfg);
     } else {
+      holder.ref.config.type = type;
       holder.ref.data.labels = labels;
+      holder.ref.data.datasets[0].label = title;
       holder.ref.data.datasets[0].data = data;
       holder.ref.update();
     }
+  }
+
+  // Filtro por negocio (para órdenes)
+  function filteredOrdersForCharts(){
+    return chartsBusiness ? orders.filter(o => o.restaurant === chartsBusiness) : orders.slice();
   }
 
   function updateCharts(){
@@ -310,36 +346,108 @@
     const c2El = document.getElementById('chartOrdersWeek');
     const c3El = document.getElementById('chartRevenueHour');
     const c4El = document.getElementById('chartRevenueWeek');
-    if (!c1El || !c2El || !c3El || !c4El) return; // aún no se abrió el modal
+    if (!c1El || !c2El || !c3El || !c4El) return;
 
     const today = todayYMD_MX();
     const weekYMDs = weekYMDs_MX();
+    const src = filteredOrdersForCharts();
 
     const countHour = HOURS.map(()=>0);
     const moneyHour = HOURS.map(()=>0);
     const countWeek = [0,0,0,0,0,0,0];
     const moneyWeek = [0,0,0,0,0,0,0];
 
-    for (const o of orders){
+    for (const o of src){
       const { ymd, hour } = mxParts(o.iso);
       const amount = Number(o.amount)||0;
 
-      // Diario (solo hoy 08–24)
       if (ymd === today && hour >= 8 && hour <= 24){
         const idx = HOURS.indexOf(hour);
         if (idx !== -1){ countHour[idx]++; moneyHour[idx] += amount; }
       }
 
-      // Semanal (semana actual, Lun..Dom)
       const idxDay = weekYMDs.indexOf(ymd);
       if (idxDay !== -1){ countWeek[idxDay]++; moneyWeek[idxDay] += amount; }
     }
 
-    buildOrUpdateChart({get ref(){return chartOrdersHour}, set ref(v){chartOrdersHour=v;}}, c1El.getContext('2d'), HOUR_LABELS, countHour, 'Pedidos (hoy)');
-    buildOrUpdateChart({get ref(){return chartOrdersWeek}, set ref(v){chartOrdersWeek=v;}}, c2El.getContext('2d'), WEEKDAY_LABELS, countWeek, 'Pedidos (semana)');
-    buildOrUpdateChart({get ref(){return chartRevenueHour}, set ref(v){chartRevenueHour=v;}}, c3El.getContext('2d'), HOUR_LABELS, moneyHour, 'MXN (hoy)');
-    buildOrUpdateChart({get ref(){return chartRevenueWeek}, set ref(v){chartRevenueWeek=v;}}, c4El.getContext('2d'), WEEKDAY_LABELS, moneyWeek, 'MXN (semana)');
+    buildOrUpdate({get ref(){return chartOrdersHour}, set ref(v){chartOrdersHour=v}, ctx:c1El.getContext('2d')}, 'bar',  HOUR_LABELS,    countHour, 'Pedidos (hoy)');
+    buildOrUpdate({get ref(){return chartOrdersWeek}, set ref(v){chartOrdersWeek=v}, ctx:c2El.getContext('2d')}, 'bar',  WEEKDAY_LABELS, countWeek, 'Pedidos (semana)');
+    buildOrUpdate({get ref(){return chartRevenueHour}, set ref(v){chartRevenueHour=v}, ctx:c3El.getContext('2d')}, 'bar',  HOUR_LABELS,    moneyHour, 'MXN (hoy)');
+    buildOrUpdate({get ref(){return chartRevenueWeek}, set ref(v){chartRevenueWeek=v}, ctx:c4El.getContext('2d')}, 'bar',  WEEKDAY_LABELS, moneyWeek, 'MXN (semana)');
   }
+
+  // Gráfica histórica (primer pedido → último)
+  function updateAllChart(){
+    const canvas = document.getElementById('chartAll');
+    if (!canvas) return;
+
+    const mode = chartAllModeSel?.value || 'negocio';
+    const src = filteredOrdersForCharts();
+
+    // Construcciones por modo
+    if (mode === 'negocio'){
+      // Barras: pedidos por negocio
+      const map = new Map();
+      src.forEach(o => map.set(o.restaurant, (map.get(o.restaurant)||0)+1));
+      const labels = Array.from(map.keys());
+      const data = Array.from(map.values());
+      buildOrUpdate({get ref(){return chartAll}, set ref(v){chartAll=v}, ctx:canvas.getContext('2d')}, 'bar', labels, data, 'Pedidos por negocio');
+      return;
+    }
+
+    if (mode === 'dia-semana'){
+      const labels = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+      const data = [0,0,0,0,0,0,0];
+      for (const o of src){
+        const wd = new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(new Date(o.iso)).toLowerCase();
+        const i = wd.startsWith('lun')?0:wd.startsWith('mar')?1:(wd.startsWith('mié')||wd.startsWith('mie'))?2:wd.startsWith('jue')?3:wd.startsWith('vie')?4:(wd.startsWith('sáb')||wd.startsWith('sab'))?5:6;
+        data[i] += 1;
+      }
+      buildOrUpdate({get ref(){return chartAll}, set ref(v){chartAll=v}, ctx:canvas.getContext('2d')}, 'bar', labels, data, 'Pedidos por día de la semana');
+      return;
+    }
+
+    if (mode === 'hora-dia'){
+      const labels = Array.from({length:24}, (_,i)=> (i<10?'0'+i:String(i)));
+      const data = Array.from({length:24}, ()=>0);
+      for (const o of src){
+        const h = mxParts(o.iso).hour;
+        data[h] += 1;
+      }
+      buildOrUpdate({get ref(){return chartAll}, set ref(v){chartAll=v}, ctx:canvas.getContext('2d')}, 'bar', labels, data, 'Pedidos por hora del día');
+      return;
+    }
+
+    if (mode === 'acumulado'){
+      // Línea: ingresos acumulados cronológicos
+      const points = src.slice().sort((a,b)=>Date.parse(a.iso)-Date.parse(b.iso));
+      let sum = 0;
+      const labels = [];
+      const data = [];
+      for (const o of points){
+        sum += Number(o.amount)||0;
+        labels.push(mxParts(o.iso).ymd);
+        data.push(sum);
+      }
+      buildOrUpdate({get ref(){return chartAll}, set ref(v){chartAll=v}, ctx:canvas.getContext('2d')}, 'line', labels, data, 'Ingresos acumulados');
+      return;
+    }
+
+    // mode === 'ganancias'
+    {
+      // Línea/barras: ganancias por mes (del primer al último)
+      const monthMap = new Map(); // 'YYYY-MM' -> sum
+      for (const o of src){
+        const { ym } = mxParts(o.iso);
+        monthMap.set(ym, (monthMap.get(ym)||0) + (Number(o.amount)||0));
+      }
+      const labels = Array.from(monthMap.keys()).sort();
+      const data = labels.map(k => monthMap.get(k));
+      buildOrUpdate({get ref(){return chartAll}, set ref(v){chartAll=v}, ctx:canvas.getContext('2d')}, 'bar', labels, data, 'Ganancias por mes');
+    }
+  }
+
+  chartAllModeSel?.addEventListener('change', () => updateAllChart());
 
   // ────────────────────────────────────────────────────────────────────────────
   // 6) Realtime (Ably)
@@ -354,7 +462,10 @@
     if (historyDialog.open) {
       renderHistoryTable();
       fmtSummary();
-      updateCharts(); // refresca gráficas en vivo si el modal está abierto
+    }
+    if (chartsDialog.open) {
+      updateCharts();
+      updateAllChart();
     }
     statusEl.textContent = 'Actualizado en tiempo real';
   });
@@ -366,7 +477,10 @@
     if (historyDialog.open) {
       renderHistoryTable();
       fmtSummary();
+    }
+    if (chartsDialog.open) {
       updateCharts();
+      updateAllChart();
     }
   });
 
@@ -376,7 +490,10 @@
     if (historyDialog.open) {
       renderHistoryTable();
       fmtSummary();
+    }
+    if (chartsDialog.open) {
       updateCharts();
+      updateAllChart();
     }
   });
 
@@ -386,6 +503,7 @@
     if (!restaurants.some(x => x.name === name)){
       restaurants.push({ name, createdAt: createdAt || new Date().toISOString() });
       renderRestaurants();
+      fillBusinessFilter();
       statusEl.textContent = 'Restaurantes sincronizados';
     }
   });
@@ -394,6 +512,7 @@
     const name = msg.data.name;
     restaurants = restaurants.filter(x => x.name !== name);
     renderRestaurants();
+    fillBusinessFilter();
     statusEl.textContent = 'Restaurante eliminado';
   });
 
@@ -408,6 +527,7 @@
     );
     orders = data.orders || [];
     renderRestaurants();
+    fillBusinessFilter();
   }
   await loadInitial();
 
@@ -424,36 +544,53 @@
     });
   });
 
-  historyBtn.addEventListener('click', async () => {
+  // Abrir Historial
+  async function openHistory(){
     const r = await fetch('/.netlify/functions/get-state', { cache: 'no-store' });
     const data = await r.json();
     orders = data.orders || [];
-    page = 1;                 // abrir siempre en página 1
+    page = 1;
     renderHistoryTable();
     fmtSummary();
-    updateCharts();           // dibuja/actualiza gráficas al abrir
     historyDialog.showModal();
-  });
-
+  }
+  historyBtn.addEventListener('click', openHistory);
   closeHistory.addEventListener('click', () => historyDialog.close());
 
-  acceptBtn.addEventListener('click', async () => {
-    if (!selectedRestaurant){
-      alert('Primero toca un restaurante para asignar el pedido.');
-      return;
+  // Abrir Gráficas
+  async function openCharts(){
+    if (!orders.length){
+      const r = await fetch('/.netlify/functions/get-state', { cache: 'no-store' });
+      const data = await r.json();
+      orders = data.orders || [];
     }
-    const amount = parseFloat(amountInput.value || '0');
-    if (isNaN(amount) || amount <= 0){
-      alert('Ingresa un monto válido.');
-      return;
+    updateCharts();
+    updateAllChart();
+    chartsDialog.showModal();
+  }
+  chartsBtn?.addEventListener('click', openCharts);
+  closeCharts?.addEventListener('click', () => chartsDialog.close());
+
+  // Exportar a CSV (Excel)
+  excelBtn?.addEventListener('click', async () => {
+    if (!orders?.length) {
+      const r = await fetch('/.netlify/functions/get-state', { cache: 'no-store' });
+      const data = await r.json();
+      orders = data.orders || [];
     }
-    await fetch('/.netlify/functions/add-order', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ restaurant: selectedRestaurant, amount })
-    });
-    amountInput.value = '';
+    const header = ['Fecha (MX)','ISO','Restaurante','Monto'];
+    const rows = orders.map(o => [
+      (o.localTime || ''), (o.iso || ''), (o.restaurant || ''), String(o.amount ?? '')
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pedidos_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
 })();
-
-
