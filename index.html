@@ -51,14 +51,28 @@
         <button class="btn btn-primary" id="acceptBtn">Aceptar</button>
       </div>
 
-      <div class="stack">
-        <div class="section-title">Restaurantes</div>
-        <div class="restaurant-list" id="restaurantList"></div>
-        <button class="btn btn-ghost" id="addRestaurantBtn">+ Agregar restaurante</button>
-        <div class="footer muted" id="status">Sincronizando…</div>
-      </div>
-    </div>
+<div class="stack">
+  <!-- Línea con título y selector -->
+  <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+    <span>Restaurantes</span>
+    <select id="sortSelect" class="btn" style="padding:4px 8px; font-size:12px;">
+      <option value="az">A–Z</option>
+      <option value="za">Z–A</option>
+      <option value="new">Reciente primero</option>
+      <option value="old">Antiguo primero</option>
+    </select>
   </div>
+
+  <!-- Lista de restaurantes -->
+  <div class="restaurant-list" id="restaurantList"></div>
+
+  <!-- Botón para agregar -->
+  <button class="btn btn-ghost" id="addRestaurantBtn">+ Agregar restaurante</button>
+
+  <!-- Estado -->
+  <div class="footer muted" id="status">Sincronizando…</div>
+</div>
+
 
   <dialog id="historyDialog">
     <div class="head">
@@ -81,13 +95,4 @@
   <script type="module" src="/app.v2.js"></script>
 </body>
 </html>
-<!-- En tu index.html, cerca de "RESTAURANTES" -->
-<div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
-  <span>Restaurantes</span>
-  <select id="sortSelect" class="btn" style="padding:8px 10px;font-size:12px;">
-    <option value="az">A–Z</option>
-    <option value="za">Z–A</option>
-    <option value="new">Reciente primero</option>
-    <option value="old">Antiguo primero</option>
-  </select>
-</div>
+
