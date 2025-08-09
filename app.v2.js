@@ -1,8 +1,4 @@
-// app.v2.js — Frontend con Ably + Netlify Functions
-// - Orden A–Z / Z–A / Reciente / Antiguo (por createdAt)
-// - Borrar restaurante (✕)
-// - Registro de pedidos en tiempo real
-// - Gráficas (diaria por hora 08–24 y semanal Lun–Dom) para cantidad y ganancias
+// app.v2.js — App completa (Ably + Netlify Functions + Gráficas + Historial con paginación y acciones)
 
 (async () => {
   // ────────────────────────────────────────────────────────────────────────────
@@ -30,24 +26,47 @@
   const historyTableBody = document.querySelector('#historyTable tbody');
   const summaryEl        = document.getElementById('summary');
 
-  // Selector de orden (DEBE existir en el HTML, junto al título)
+  // Selector de orden (restaurantes)
   const sortSelect       = document.getElementById('sortSelect');
+
+  // Filtros de historial + paginador
+  const historySortSel   = document.getElementById('historySort');
+  const pgPrev           = document.getElementById('pgPrev');
+  const pgNext           = document.getElementById('pgNext');
+  const pgNums           = document.getElementById('pgNums');
 
   // ────────────────────────────────────────────────────────────────────────────
   // 3) Estado
   // ────────────────────────────────────────────────────────────────────────────
   let selectedRestaurant = null;
-  // Usamos objetos { name, createdAt } para poder ordenar por fecha
+  // Restaurantes como objetos { name, createdAt }
   let restaurants = [];
+  // Pedidos: { id, restaurant, amount, iso, localTime }
   let orders = [];
-  let sortMode = localStorage.getItem('sortMode') || 'az';
 
+  // Orden restaurantes
+  let sortMode = localStorage.getItem('sortMode') || 'az';
   if (sortSelect) {
     sortSelect.value = sortMode;
     sortSelect.addEventListener('change', () => {
       sortMode = sortSelect.value;
       localStorage.setItem('sortMode', sortMode);
       renderRestaurants();
+    });
+  }
+
+  // Historial: orden y paginación
+  const PAGE_SIZE = 20;
+  let historySort = localStorage.getItem('historySort') || 'date_desc';
+  let page = 1;
+
+  if (historySortSel){
+    historySortSel.value = historySort;
+    historySortSel.addEventListener('change', () => {
+      historySort = historySortSel.value;
+      localStorage.setItem('historySort', historySort);
+      page = 1;
+      renderHistoryTable();
     });
   }
 
@@ -74,7 +93,7 @@
     }
   }
 
-  // Orden local
+  // Orden de restaurantes
   function sortRestaurants(arr){
     const a = arr.slice();
     if (sortMode === 'az')  a.sort((x,y)=> x.name.localeCompare(y.name));
@@ -112,6 +131,7 @@
         amountInput.value = '';
       });
 
+      // Icono borrar restaurante
       const del = document.createElement('button');
       del.textContent = '✕';
       del.title = 'Eliminar restaurante';
@@ -138,15 +158,79 @@
     statusEl.textContent = `Listo · ${restaurants.length} restaurantes`;
   }
 
-  // Tabla del historial (recientes arriba)
+  // Orden de pedidos (historial)
+  function sortOrders(data){
+    const a = data.slice();
+    if (historySort === 'date_desc') a.sort((x,y)=> Date.parse(y.iso)-Date.parse(x.iso));
+    if (historySort === 'date_asc')  a.sort((x,y)=> Date.parse(x.iso)-Date.parse(y.iso));
+    if (historySort === 'name_az')   a.sort((x,y)=> x.restaurant.localeCompare(y.restaurant));
+    if (historySort === 'name_za')   a.sort((x,y)=> y.restaurant.localeCompare(x.restaurant));
+    return a;
+  }
+
+  function renderPager(total){
+    if (!pgPrev || !pgNext || !pgNums) return;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    pgNums.innerHTML = '';
+    for (let i=1;i<=pages;i++){
+      const b = document.createElement('button');
+      b.className = 'btn btn-xs';
+      b.textContent = i;
+      if (i === page) b.style.background = '#2a2f3a';
+      b.addEventListener('click', ()=>{ page = i; renderHistoryTable(); });
+      pgNums.appendChild(b);
+    }
+    pgPrev.onclick = ()=>{ if (page>1){ page--; renderHistoryTable(); } };
+    pgNext.onclick = ()=>{ if (page<pages){ page++; renderHistoryTable(); } };
+  }
+
+  // Tabla del historial (paginada)
   function renderHistoryTable(){
+    const sorted = sortOrders(orders);
+    const start = (page-1)*PAGE_SIZE;
+    const slice = sorted.slice(start, start+PAGE_SIZE);
+
     historyTableBody.innerHTML = '';
-    for (const o of orders.slice().reverse()){
+    for (const o of slice){
       const tr = document.createElement('tr');
       const dt = o.localTime || o.iso;
-      tr.innerHTML = `<td>${dt}</td><td>${o.restaurant}</td><td>${pesos(o.amount)}</td>`;
+
+      const tdDate = document.createElement('td'); tdDate.textContent = dt;
+      const tdRest = document.createElement('td'); tdRest.textContent = o.restaurant;
+      const tdAmt  = document.createElement('td'); tdAmt.textContent  = pesos(o.amount);
+
+      // Acciones: Editar / Eliminar
+      const tdAct  = document.createElement('td');
+      const bEdit = document.createElement('button'); bEdit.className='btn btn-xs'; bEdit.title='Editar'; bEdit.textContent='✎';
+      const bDel  = document.createElement('button'); bDel.className='btn btn-xs';  bDel.title='Eliminar'; bDel.textContent='🗑';
+
+      bEdit.addEventListener('click', async ()=>{
+        const newRest = prompt('Restaurante:', o.restaurant);
+        if (newRest == null) return;
+        const newAmt  = prompt('Monto:', o.amount);
+        if (newAmt == null) return;
+        const amount = Number(newAmt);
+        if (Number.isNaN(amount) || amount<=0){ alert('Monto inválido'); return; }
+        await fetch('/.netlify/functions/update-order', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ id:o.id, restaurant:newRest.trim(), amount })
+        });
+      });
+
+      bDel.addEventListener('click', async ()=>{
+        if (!confirm('¿Eliminar este pedido?')) return;
+        await fetch('/.netlify/functions/delete-order', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ id:o.id })
+        });
+      });
+
+      tdAct.appendChild(bEdit); tdAct.appendChild(bDel);
+      tr.append(tdDate, tdRest, tdAmt, tdAct);
       historyTableBody.appendChild(tr);
     }
+
+    renderPager(orders.length);
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -264,6 +348,7 @@
   const ordersChannel = realtime.channels.get('orders');
   const restaurantsChannel = realtime.channels.get('restaurants');
 
+  // Pedidos
   ordersChannel.subscribe('added', msg => {
     orders.push(msg.data);
     if (historyDialog.open) {
@@ -274,6 +359,28 @@
     statusEl.textContent = 'Actualizado en tiempo real';
   });
 
+  ordersChannel.subscribe('updated', msg => {
+    const u = msg.data;
+    const i = orders.findIndex(o => o.id === u.id);
+    if (i !== -1) orders[i] = u;
+    if (historyDialog.open) {
+      renderHistoryTable();
+      fmtSummary();
+      updateCharts();
+    }
+  });
+
+  ordersChannel.subscribe('removed', msg => {
+    const { id } = msg.data;
+    orders = orders.filter(o => o.id !== id);
+    if (historyDialog.open) {
+      renderHistoryTable();
+      fmtSummary();
+      updateCharts();
+    }
+  });
+
+  // Restaurantes
   restaurantsChannel.subscribe('added', msg => {
     const { name, createdAt } = msg.data;
     if (!restaurants.some(x => x.name === name)){
@@ -321,9 +428,10 @@
     const r = await fetch('/.netlify/functions/get-state', { cache: 'no-store' });
     const data = await r.json();
     orders = data.orders || [];
+    page = 1;                 // abrir siempre en página 1
     renderHistoryTable();
     fmtSummary();
-    updateCharts(); // dibuja/actualiza gráficas al abrir
+    updateCharts();           // dibuja/actualiza gráficas al abrir
     historyDialog.showModal();
   });
 
@@ -347,4 +455,5 @@
     amountInput.value = '';
   });
 })();
+
 
