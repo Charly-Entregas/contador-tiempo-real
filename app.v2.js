@@ -66,14 +66,15 @@
     }
   }
 
-  function sortRestaurants(arr){
-    const a = arr.slice();
-    if (sortMode === 'az')  a.sort((x,y)=>x.name.localeCompare(y.name));
-    if (sortMode === 'za')  a.sort((x,y)=>y.name.localeCompare(x.name));
-    if (sortMode === 'new') a.sort((x,y)=>new Date(y.createdAt) - new Date(x.createdAt)).reverse(); // reciente primero
-    if (sortMode === 'old') a.sort((x,y)=>new Date(x.createdAt) - new Date(y.createdAt));          // antiguo primero
-    return a;
-  }
+function sortRestaurants(arr){
+  const a = arr.slice();
+  if (sortMode === 'az')  a.sort((x,y)=> x.name.localeCompare(y.name));
+  if (sortMode === 'za')  a.sort((x,y)=> y.name.localeCompare(x.name));
+  if (sortMode === 'new') a.sort((x,y)=> Date.parse(y.createdAt||0) - Date.parse(x.createdAt||0)); // reciente primero
+  if (sortMode === 'old') a.sort((x,y)=> Date.parse(x.createdAt||0) - Date.parse(y.createdAt||0)); // antiguo primero
+  return a;
+}
+
 
   function renderRestaurants(){
     restaurantList.innerHTML = '';
@@ -150,14 +151,15 @@
     statusEl.textContent = 'Actualizado en tiempo real';
   });
 
-  restaurantsChannel.subscribe('added', msg => {
-    const name = msg.data.name;
-    if (!restaurants.some(x => x.name === name)){
-      restaurants.push({ name, createdAt: new Date().toISOString() });
-      renderRestaurants();
-      statusEl.textContent = 'Restaurantes sincronizados';
-    }
-  });
+restaurantsChannel.subscribe('added', msg => {
+  const { name, createdAt } = msg.data;
+  if (!restaurants.some(x => x.name === name)){
+    restaurants.push({ name, createdAt: createdAt || new Date().toISOString() });
+    renderRestaurants();
+    statusEl.textContent = 'Restaurantes sincronizados';
+  }
+});
+
   restaurantsChannel.subscribe('removed', msg => {
     const name = msg.data.name;
     restaurants = restaurants.filter(x => x.name !== name);
