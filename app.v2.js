@@ -1,4 +1,5 @@
 // app.v2.js — App completa (Ably + Netlify Functions + Gráficas en modal + Historial con paginación/acciones)
+// + Filtros para la gráfica histórica: rango De/Al, Reporte mensual, Reporte anual, y resumen.
 
 (async () => {
   // ────────────────────────────────────────────────────────────────────────────
@@ -41,6 +42,15 @@
   const chartsFilterBusiness = document.getElementById('chartsFilterBusiness');
   const chartsClearFilter    = document.getElementById('chartsClearFilter');
   const chartAllModeSel      = document.getElementById('chartAllMode');
+
+  // Filtros de la sección HISTÓRICA (solo para chartAll)
+  const histFrom    = document.getElementById('histFrom');
+  const histTo      = document.getElementById('histTo');
+  const histMonth   = document.getElementById('histMonth');
+  const histYear    = document.getElementById('histYear');
+  const btnMonthly  = document.getElementById('btnMonthly');
+  const btnAnnual   = document.getElementById('btnAnnual');
+  const histSummary = document.getElementById('histSummary');
 
   // ────────────────────────────────────────────────────────────────────────────
   // 3) Estado
@@ -287,8 +297,6 @@
 
   // Semana actual (Lun..Dom)
   function weekYMDs_MX(){
-    const now = new Date();
-    const dow = (d => ['lun','mar','mie','jue','vie','sab','dom'][d])( (new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(now).toLowerCase().startsWith('lun')) ? 0 : 0 ); // no crítica
     const today = new Date();
     const labelIdx = (iso) => {
       const nm = new Intl.DateTimeFormat('es-MX',{ timeZone: MX_TZ, weekday:'short'}).format(new Date(iso)).toLowerCase();
@@ -341,6 +349,50 @@
     return chartsBusiness ? orders.filter(o => o.restaurant === chartsBusiness) : orders.slice();
   }
 
+  // ───────────── NUEVO: utilidades de rango para la gráfica histórica ─────────
+  function ymdToDateMX(ymd, endOfDay=false){
+    const [y,m,d] = ymd.split('-').map(n=>parseInt(n,10));
+    return new Date(Date.UTC(y, m-1, d, endOfDay?23:0, endOfDay?59:0, endOfDay?59:0));
+  }
+  function lastDayOfMonth(y, m){ return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+
+  function setRange(fromYMD, toYMD){
+    if (histFrom) histFrom.value = fromYMD;
+    if (histTo)   histTo.value   = toYMD;
+    updateAllChart();
+  }
+  function setMonthlyRange(y, m){
+    const d1 = `${y}-${String(m).padStart(2,'0')}-01`;
+    const d2 = `${y}-${String(m).padStart(2,'0')}-${String(lastDayOfMonth(y,m)).padStart(2,'0')}`;
+    setRange(d1, d2);
+  }
+  function setAnnualRange(y){
+    setRange(`${y}-01-01`, `${y}-12-31`);
+  }
+
+  function ordersInSelectedRange(src){
+    if (!histFrom?.value || !histTo?.value) return src;
+    const from = ymdToDateMX(histFrom.value, false);
+    const to   = ymdToDateMX(histTo.value, true);
+    return src.filter(o => {
+      const d = new Date(o.iso);
+      return d >= from && d <= to;
+    });
+  }
+
+  function fillYearsForHistory(){
+    if (!histYear) return;
+    const years = new Set();
+    for (const o of orders){
+      years.add(mxParts(o.iso).ymd.slice(0,4));
+    }
+    if (years.size === 0) years.add(new Date().getUTCFullYear().toString());
+    const sorted = Array.from(years).sort();
+    const current = new Date().getUTCFullYear().toString();
+    histYear.innerHTML = sorted.map(y => `<option value="${y}" ${y===current?'selected':''}>${y}</option>`).join('');
+  }
+  // ──────────── FIN utilidades de rango para la gráfica histórica ─────────────
+
   function updateCharts(){
     const c1El = document.getElementById('chartOrdersHour');
     const c2El = document.getElementById('chartOrdersWeek');
@@ -376,17 +428,30 @@
     buildOrUpdate({get ref(){return chartRevenueWeek}, set ref(v){chartRevenueWeek=v}, ctx:c4El.getContext('2d')}, 'bar',  WEEKDAY_LABELS, moneyWeek, 'MXN (semana)');
   }
 
-  // Gráfica histórica (primer pedido → último)
+  // Gráfica histórica (primer pedido → último) + filtros de rango
   function updateAllChart(){
     const canvas = document.getElementById('chartAll');
     if (!canvas) return;
 
     const mode = chartAllModeSel?.value || 'negocio';
-    const src = filteredOrdersForCharts();
+    // 1) Filtro por negocio
+    let src = filteredOrdersForCharts();
+    // 2) Filtro por rango (histórico)
+    src = ordersInSelectedRange(src);
+
+    // Resumen de rango
+    const count = src.length;
+    const total = src.reduce((a,b)=> a + (Number(b.amount)||0), 0);
+    const niceRange =
+      (histFrom?.value && histTo?.value)
+      ? ` (${histFrom.value} → ${histTo.value})`
+      : '';
+    if (histSummary){
+      histSummary.innerHTML = `<span class="pill"><strong>${count}</strong> viajes${niceRange}</span> <span class="pill"><strong>Total:</strong> ${pesos(total)}</span>`;
+    }
 
     // Construcciones por modo
     if (mode === 'negocio'){
-      // Barras: pedidos por negocio
       const map = new Map();
       src.forEach(o => map.set(o.restaurant, (map.get(o.restaurant)||0)+1));
       const labels = Array.from(map.keys());
@@ -419,7 +484,6 @@
     }
 
     if (mode === 'acumulado'){
-      // Línea: ingresos acumulados cronológicos
       const points = src.slice().sort((a,b)=>Date.parse(a.iso)-Date.parse(b.iso));
       let sum = 0;
       const labels = [];
@@ -433,9 +497,8 @@
       return;
     }
 
-    // mode === 'ganancias'
+    // mode === 'ganancias' → por mes
     {
-      // Línea/barras: ganancias por mes (del primer al último)
       const monthMap = new Map(); // 'YYYY-MM' -> sum
       for (const o of src){
         const { ym } = mxParts(o.iso);
@@ -564,12 +627,51 @@
       const data = await r.json();
       orders = data.orders || [];
     }
+
+    // Inicializa años y rango por defecto (mes actual) si está vacío
+    fillYearsForHistory();
+    if (histFrom && !histFrom.value && histYear && histMonth){
+      const now = new Date();
+      histYear.value  = String(now.getUTCFullYear());
+      histMonth.value = String(now.getUTCMonth()+1);
+      setMonthlyRange(parseInt(histYear.value,10), parseInt(histMonth.value,10));
+    }
+
     updateCharts();
     updateAllChart();
     chartsDialog.showModal();
   }
   chartsBtn?.addEventListener('click', openCharts);
   closeCharts?.addEventListener('click', () => chartsDialog.close());
+
+  // Filtros del histórico (inputs y botones)
+  histFrom?.addEventListener('change', () => updateAllChart());
+  histTo?.addEventListener('change',   () => updateAllChart());
+  btnMonthly?.addEventListener('click', () => {
+    const y = parseInt(histYear.value || new Date().getUTCFullYear(), 10);
+    const m = parseInt(histMonth.value || (new Date().getUTCMonth()+1), 10);
+    setMonthlyRange(y, m);
+    // Resumen con estilo “en Mes Año”
+    const src = ordersInSelectedRange(filteredOrdersForCharts());
+    const count = src.length;
+    const total = src.reduce((a,b)=>a+(Number(b.amount)||0),0);
+    const nombreMes = histMonth.options[histMonth.selectedIndex].textContent;
+    if (histSummary){
+      histSummary.innerHTML =
+        `<span class="pill"><strong>${count}</strong> viajes en ${nombreMes} ${y}</span> <span class="pill"><strong>Total:</strong> ${pesos(total)}</span>`;
+    }
+  });
+  btnAnnual?.addEventListener('click', () => {
+    const y = parseInt(histYear.value || new Date().getUTCFullYear(), 10);
+    setAnnualRange(y);
+    const src = ordersInSelectedRange(filteredOrdersForCharts());
+    const count = src.length;
+    const total = src.reduce((a,b)=>a+(Number(b.amount)||0),0);
+    if (histSummary){
+      histSummary.innerHTML =
+        `<span class="pill"><strong>${count}</strong> viajes en ${y}</span> <span class="pill"><strong>Total:</strong> ${pesos(total)}</span>`;
+    }
+  });
 
   // Exportar a CSV (Excel)
   excelBtn?.addEventListener('click', async () => {
