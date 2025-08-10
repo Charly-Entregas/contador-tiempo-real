@@ -177,6 +177,31 @@
             </select>
           </div>
           <canvas id="chartAll" height="140"></canvas>
+          <!-- Resumen del rango histórico -->
+<div id="histSummary" class="summary" style="margin:8px 0 0"></div>
+
+<!-- Filtros de la sección HISTÓRICA (solo afectan a chartAll) -->
+<div class="row" id="histFilters" style="gap:10px;margin-top:8px">
+  <!-- Rango manual -->
+  <input id="histFrom" type="date" class="btn" style="padding:8px 10px">
+  <input id="histTo"   type="date" class="btn" style="padding:8px 10px">
+
+  <!-- Atajos: Mes/Año -->
+  <select id="histMonth" class="btn" style="padding:8px 10px">
+    <option value="1">Enero</option><option value="2">Febrero</option>
+    <option value="3">Marzo</option><option value="4">Abril</option>
+    <option value="5">Mayo</option><option value="6">Junio</option>
+    <option value="7">Julio</option><option value="8">Agosto</option>
+    <option value="9">Septiembre</option><option value="10">Octubre</option>
+    <option value="11">Noviembre</option><option value="12">Diciembre</option>
+  </select>
+
+  <select id="histYear" class="btn" style="padding:8px 10px"></select>
+
+  <button id="btnMonthly" class="btn btn-xs">Reporte mensual</button>
+  <button id="btnAnnual"  class="btn btn-xs">Reporte anual</button>
+</div>
+
         </div>
       </div>
     </div>
